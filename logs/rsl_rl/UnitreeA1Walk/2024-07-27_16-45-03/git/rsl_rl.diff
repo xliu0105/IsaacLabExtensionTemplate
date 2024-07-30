@@ -1,0 +1,36 @@
+--- git status ---
+On branch master
+Your branch is up to date with 'origin/master'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   rsl_rl/runners/on_policy_runner.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/rsl_rl/runners/on_policy_runner.py b/rsl_rl/runners/on_policy_runner.py
+index 9e0a459..2c7cf0e 100644
+--- a/rsl_rl/runners/on_policy_runner.py
++++ b/rsl_rl/runners/on_policy_runner.py
+@@ -64,7 +64,8 @@ class OnPolicyRunner:
+         self.current_learning_iteration = 0
+         self.git_status_repos = [rsl_rl.__file__]
+ 
+-    def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
++# 这个learn函数我做了修改,添加了only_positive_rewards参数，如果设置为True，那么只有正的reward才会被记录，负的reward会被clip成0
++    def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False, only_positive_rewards: bool = False):
+         # initialize writer
+         if self.log_dir is not None and self.writer is None:
+             # Launch either Tensorboard or Neptune & Tensorboard summary writer(s), default: Tensorboard.
+@@ -110,6 +111,8 @@ class OnPolicyRunner:
+                 for i in range(self.num_steps_per_env):
+                     actions = self.alg.act(obs, critic_obs)
+                     obs, rewards, dones, infos = self.env.step(actions)
++                    if only_positive_rewards:
++                        rewards = torch.clamp(rewards, min=0.0)
+                     obs = self.obs_normalizer(obs)
+                     if "critic" in infos["observations"]:
+                         critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"])

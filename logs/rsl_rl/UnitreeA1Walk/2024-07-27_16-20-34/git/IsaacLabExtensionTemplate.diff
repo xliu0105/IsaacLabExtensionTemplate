@@ -1,0 +1,135 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   scripts/rsl_rl/cli_args.py
+	modified:   scripts/rsl_rl/play.py
+	modified:   scripts/rsl_rl/train.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	scripts/__init__.py
+	scripts/unitree_isaaclab_env/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/scripts/rsl_rl/cli_args.py b/scripts/rsl_rl/cli_args.py
+index ea91c7a..3df527d 100644
+--- a/scripts/rsl_rl/cli_args.py
++++ b/scripts/rsl_rl/cli_args.py
+@@ -31,6 +31,8 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
+     arg_group.add_argument(
+         "--log_project_name", type=str, default=None, help="Name of the logging project when using wandb or neptune."
+     )
++    arg_group.add_argument("--pre_trained", type=bool, default=False, 
++                           help="Whether to load a pre-trained model, if Ture, resume must be False.")
+ 
+ 
+ def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlOnPolicyRunnerCfg:
+diff --git a/scripts/rsl_rl/play.py b/scripts/rsl_rl/play.py
+index 6ea0ed6..07ebe31 100644
+--- a/scripts/rsl_rl/play.py
++++ b/scripts/rsl_rl/play.py
+@@ -30,6 +30,7 @@ simulation_app = app_launcher.app
+ 
+ import gymnasium as gym
+ import os
++import sys
+ import torch
+ 
+ from rsl_rl.runners import OnPolicyRunner
+@@ -40,6 +41,11 @@ import ext_template.tasks  # noqa: F401
+ from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
+ 
++Unitree_package_path = "scripts"
++if Unitree_package_path not in sys.path:
++    sys.path.append(Unitree_package_path)
++import unitree_isaaclab_env # 导入自定义的Unitree训练的环境的包，这会执行unitree_isaaclab_env/__init__.py文件，自动注册自定义的Unitree的环境
++
+ 
+ def main():
+     """Play with RSL-RL agent."""
+diff --git a/scripts/rsl_rl/train.py b/scripts/rsl_rl/train.py
+index 97f9739..8925003 100644
+--- a/scripts/rsl_rl/train.py
++++ b/scripts/rsl_rl/train.py
+@@ -32,6 +32,7 @@ simulation_app = app_launcher.app
+ 
+ import gymnasium as gym
+ import os
++import sys
+ import torch
+ from datetime import datetime
+ 
+@@ -46,20 +47,33 @@ from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
+ from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+ 
++Unitree_package_path = "scripts"
++if Unitree_package_path not in sys.path:
++    sys.path.append(Unitree_package_path)
++
++import unitree_isaaclab_env # 导入自定义的Unitree训练的环境的包，这会执行unitree_isaaclab_env/__init__.py文件，自动注册自定义的Unitree的环境
++
++# 这些配置是在Pytorch中优化CUDA和cuDNN的配置
++# TF32是在NVIDIA Ampere架构GPU上引入的新浮点格式，前两个设为true，则会允许cuda和cudnn使用TF32格式，可以显著提高计算性能，但会带来轻微的数值精度损失，但在深度学习任务中通常不会有太大影响
+ torch.backends.cuda.matmul.allow_tf32 = True
+ torch.backends.cudnn.allow_tf32 = True
++# 控制cudnn是否使用确定性算法，如果设置为True，保证每次运行的结果是一样的，但会降低性能；如果为False，每次算法的运行结果可能会有所不同，但通常会更快
+ torch.backends.cudnn.deterministic = False
++# cudnn是否启用基准测试模式。设为false则不启用，使用默认的算法运行卷积操作；设为true则启用，为每一个卷积层运行基准测试，以选择最优的算法提高性能
++# 这个过程在初次运行时会有一定的时间开销，但是在后续的运行中会提高性能
+ torch.backends.cudnn.benchmark = False
+ 
+ 
+-def main():
++def main(Pre_trained_model_path : str  = ""):
+     """Train with RSL-RL agent."""
+     # parse configuration
+     env_cfg: ManagerBasedRLEnvCfg = parse_env_cfg(args_cli.task, use_gpu=not args_cli.cpu, num_envs=args_cli.num_envs)
+     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
+ 
+     # specify directory for logging experiments
++    # NOTE: 从这里可以看出，RSL-RL的训练结果会被保存在logs/rsl_rl/experiment_name文件夹下，按照时间戳命名
+     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
++    # 注意，os.path.abspath会将指定路径转化为绝对路径，是根据运行脚本的终端路径来转化的（而不是脚本文件所在的路径）
+     log_root_path = os.path.abspath(log_root_path)
+     print(f"[INFO] Logging experiment in directory: {log_root_path}")
+     # specify directory for logging runs: {time-stamp}_{run_name}
+@@ -89,12 +103,18 @@ def main():
+     # write git state to logs
+     runner.add_git_repo_to_log(__file__)
+     # save resume path before creating a new log_dir
+-    if agent_cfg.resume:
++    if agent_cfg.resume and args_cli.pre_trained:
++        raise ValueError("Cannot resume training and load pre-trained model at the same time.")
++    elif agent_cfg.resume and not args_cli.pre_trained:
+         # get path to previous checkpoint
++        # get_checkpoint_path是用来获取之前训练的模型的路径，并选出最新的模型和训练参数并返回
+         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+         # load previously trained model
+         runner.load(resume_path)
++    if args_cli.pre_trained and not agent_cfg.resume: # NOTE: 如果设置了使用预训练模型并且传入了预训练模型的路径
++        load_dict = torch.load(Pre_trained_model_path)
++        runner.alg.actor_critic.load_state_dict(load_dict["actor_critic"])
+ 
+     # set seed of the environment
+     env.seed(agent_cfg.seed)
+@@ -106,7 +126,9 @@ def main():
+     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
+ 
+     # run training
+-    runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
++    # NOTE: 我对rsl-rl的on_policy_runner.py文件做了修改，给learn函数添加了一个参数only_positive_rewards，其默认为false
++    # 如果only_positive_rewards设为True，则如果与环境交互的total reward为负数时，会将其clip到0；如果为False，则不会clip
++    runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True, only_positive_rewards=True)
+ 
+     # close the simulator
+     env.close()
