@@ -44,7 +44,7 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, R
 Unitree_package_path = "scripts"
 if Unitree_package_path not in sys.path:
     sys.path.append(Unitree_package_path)
-import unitree_isaaclab_env # 导入自定义的Unitree训练的环境的包，这会执行unitree_isaaclab_env/__init__.py文件，自动注册自定义的Unitree的环境
+import unitree_isaaclab_env  # 导入自定义的Unitree训练的环境的包，这会执行unitree_isaaclab_env/__init__.py文件，自动注册自定义的Unitree的环境
 
 
 def main():

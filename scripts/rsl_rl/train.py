@@ -113,7 +113,7 @@ def main(Pre_trained_model_path : str  = ""):
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
-    if args_cli.pre_trained and not agent_cfg.resume: # NOTE: 如果设置了使用预训练模型并且传入了预训练模型的路径
+    elif args_cli.pre_trained and not agent_cfg.resume:  # NOTE: 如果设置了使用预训练模型并且传入了预训练模型的路径
         load_dict = torch.load(Pre_trained_model_path)
         runner.alg.actor_critic.load_state_dict(load_dict["actor_critic"])
 
