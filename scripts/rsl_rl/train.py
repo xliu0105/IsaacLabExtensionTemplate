@@ -99,6 +99,7 @@ def main(Pre_trained_model_path : str  = ""):
     env = RslRlVecEnvWrapper(env)
 
     # create runner from rsl-rl
+    # NOTE: .to_dict()方法是@configclass修饰器自定义的方法，用来将@configclass修饰的类的实例转化为字典
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
