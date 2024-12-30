@@ -45,7 +45,7 @@ class UnitreeA1WalkSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
     )
 
-    # 这个replace是定义在@configclass的修饰器中的，这里报错不需要理会
+    # IMPORTANT: 这个replace是定义在@configclass的修饰器中的，这里报错不需要理会
     robot : ArticulationCfg = UNITREE_A1_CFG.replace(prim_path="{ENV_REGEX_NS}/UnitreeA1")
 
     # NOTE: 注意，如果要用contact sensor，注意要在ArticulationCfg的配置中把activate_contact_sensors设为True
@@ -56,26 +56,26 @@ class UnitreeA1WalkSceneCfg(InteractiveSceneCfg):
     foot_contact_sensor = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/UnitreeA1/.*foot",track_air_time = True, debug_vis = False, history_length = 3)
     whole_body_contact_sensor = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/UnitreeA1/.*", debug_vis = False, history_length = 3)
 
-    height_scanner_FL = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/UnitreeA1/FL_foot",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
-    )
-    height_scanner_FR = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/UnitreeA1/FR_foot",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
-    )
-    height_scanner_RL = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/UnitreeA1/RL_foot",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
-    )
-    height_scanner_RR = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/UnitreeA1/RR_foot",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
-    )
+    # height_scanner_FL = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/UnitreeA1/FL_foot",
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
+    # )
+    # height_scanner_FR = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/UnitreeA1/FR_foot",
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
+    # )
+    # height_scanner_RL = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/UnitreeA1/RL_foot",
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
+    # )
+    # height_scanner_RR = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/UnitreeA1/RR_foot",
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.01, 0.01]),
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.08)), attach_yaw_only=True, debug_vis=False, mesh_prim_paths=["/World/GroundPlane"],
+    # )
 
 
 # 定义ObservationsCfg
@@ -88,13 +88,16 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         Vel_command = ObsTerm(func=mdp.generated_commands,params={"command_name":"VelocityCommand"}) # 机器人的速度指令，Shape is (num_instances, 3)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel) # 关节position，Shape is (num_instances, num_joints)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel) # 关节velocity，Shape is (num_instances, num_joints)
-        IMU_base_lin_vel = ObsTerm(func=mdp.base_lin_vel) # root在自身坐标系下的线速度，Shape is (num_instances, 3)
-        IMU_base_ang_vel = ObsTerm(func=mdp.base_ang_vel) # root在自身坐标系下的角速度，Shape is (num_instances, 3)
-        IMU_base_acc = ObsTerm(func=mdp.get_body_acc, params={"asset_cfg":
+        joint_pos = ObsTerm(func=mdp.joint_pos) # 关节position，Shape is (num_instances, num_joints)
+        joint_vel = ObsTerm(func=mdp.joint_vel) # 关节velocity，Shape is (num_instances, num_joints)
+        # 正常来说，不能直接从IMU中获取速度信息，必须通过状态估计才行
+        # IMU_base_lin_vel = ObsTerm(func=mdp.base_lin_vel) # root在自身坐标系下的线速度，Shape is (num_instances, 3)
+        IMU_base_acc = ObsTerm(func=mdp.get_body_acc_lin, params={"asset_cfg":
                                                               SceneEntityCfg(name="robot",body_names="trunk")}) # 机器人在自身坐标系的加速度，Shape is (num_instances, 6)
+        IMU_base_ang_vel = ObsTerm(func=mdp.base_ang_vel) # root在自身坐标系下的角速度，Shape is (num_instances, 3)
         prev_action = ObsTerm(func=mdp.last_action, params={"action_name":"joint_pos"}) # 上一个action，Shape is (num_instances, num_joints)
+        project_grav = ObsTerm(func=mdp.projected_gravity, params={"asset_cfg":SceneEntityCfg(name="robot")}) # 机器人的重力投影，Shape is (num_instances, 3)
+        # 这里的last_action是获取上一次的action，注意，是actor网络输出的action，而不是传入给环境经过缩放+偏移后的action
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -160,7 +163,7 @@ class RewardsCfg:
 class ActionsCfg:
     # IMPORTANT: 在JointPositionActionCfg中，scale非常重要，这个scale是用来控制action的幅度的，如果scale过大，那么机器人的动作就会非常大，这样会导致训练很难收敛
     joint_pos = mdp.JointPositionActionCfg(asset_name = "robot", joint_names=[".*_hip_joint",".*_thigh_joint",".*_calf_joint"],
-                                           debug_vis=False,scale=0.25)
+                                           debug_vis=False, scale=0.25)
 
 
 @configclass
@@ -184,13 +187,13 @@ class CurriculumCfg:
 @configclass
 class EventCfg:
     reset_A1_position = EventTerm(func = mdp.reset_root_state_uniform, mode = "reset", 
-                                  params = {"pose_range":{"x":(-0.5,0.5),"y":(-0.5,0.5),"z":(-0.2,0.2),"roll":(-math.pi/24,math.pi/24),
-                                                          "pitch":(-math.pi/24,math.pi/24),"yaw":(-math.pi/12,math.pi/12)},
-                                            "velocity_range": {"x":(-0.2,0.2),"y":(-0.2,0.2),
-                                                               "yaw":(-math.pi/24,math.pi/24)}})
+                                  params = {"pose_range":{"x":(-0.5,0.5), "y":(-0.5,0.5), "z":(-0.2,0.4), "roll":(-math.pi/20,math.pi/20),
+                                                          "pitch":(-math.pi/20,math.pi/20), "yaw":(-math.pi/12,math.pi/12)},
+                                            "velocity_range": {"x":(-0.2,0.2), "y":(-0.2,0.2), "z":(-0.2,0.2), "yaw":(-math.pi/24,math.pi/24),
+                                                               "pitch":(-math.pi/24,math.pi/24), "roll":(-math.pi/24,math.pi/24)}})
     
     reset_A1_joints_position = EventTerm(func = mdp.reset_joints_by_offset, mode = "reset",
-                                        params = {"position_range":(-0.1,0.1), "velocity_range":(-0.05,0.05)})
+                                        params = {"position_range":(-0.1,0.1), "velocity_range":(-0.07,0.07)})
 
 @configclass
 class UnitreeA1WalkEnvCfg(ManagerBasedRLEnvCfg):
@@ -208,4 +211,3 @@ class UnitreeA1WalkEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
     events: EventCfg = EventCfg()
-

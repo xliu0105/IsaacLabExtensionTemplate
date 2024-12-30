@@ -11,7 +11,7 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
+# parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
@@ -36,7 +36,7 @@ import torch
 from rsl_rl.runners import OnPolicyRunner
 
 # Import extensions to set up environment tasks
-import ext_template.tasks  # noqa: F401
+# import ext_template.tasks  # noqa: F401
 
 from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
 from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
@@ -46,15 +46,17 @@ if Unitree_package_path not in sys.path:
     sys.path.append(Unitree_package_path)
 import unitree_isaaclab_env  # 导入自定义的Unitree训练的环境的包，这会执行unitree_isaaclab_env/__init__.py文件，自动注册自定义的Unitree的环境
 
+from unitree_isaaclab_env import mdp
 
 def main():
     """Play with RSL-RL agent."""
     # parse configuration
-    env_cfg = parse_env_cfg(args_cli.task, use_gpu=not args_cli.cpu, num_envs=args_cli.num_envs)
+    env_cfg = parse_env_cfg(args_cli.task, num_envs=args_cli.num_envs)
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg)
+    print(mdp.projected_gravity(env))
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env)
 
@@ -79,14 +81,18 @@ def main():
 
     # reset environment
     obs, _ = env.get_observations()
+
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
+            print("obs1     ",obs[1,:])
             # agent stepping
             actions = policy(obs)
             # env stepping
             obs, _, _, _ = env.step(actions)
+            # print(obs[1,:])
+            print("actions1   ",actions[1,:])
 
     # close the simulator
     env.close()

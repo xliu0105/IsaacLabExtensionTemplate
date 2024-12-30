@@ -48,6 +48,7 @@ def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlOnPol
     from omni.isaac.lab_tasks.utils.parse_cfg import load_cfg_from_registry
 
     # load the default configuration
+    # 从注册表中加载名为rsl_rl_cfg_entry_point的配置
     rslrl_cfg: RslRlOnPolicyRunnerCfg = load_cfg_from_registry(task_name, "rsl_rl_cfg_entry_point")
 
     # override the default configuration with CLI arguments
