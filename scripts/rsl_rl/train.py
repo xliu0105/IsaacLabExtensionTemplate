@@ -1,28 +1,42 @@
+# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Script to train RL agent with RSL-RL."""
 
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import sys
 
 from omni.isaac.lab.app import AppLauncher
 
 # local imports
 import cli_args  # isort: skip
 
+
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-# parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
-args_cli = parser.parse_args()
+args_cli, hydra_args = parser.parse_known_args()
+
+# always enable cameras to record video
+if args_cli.video:
+    args_cli.enable_cameras = True
+
+# clear out sys.argv for Hydra
+sys.argv = [sys.argv[0]] + hydra_args
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -38,13 +52,17 @@ from datetime import datetime
 
 from rsl_rl.runners import OnPolicyRunner
 
-# Import extensions to set up environment tasks
-# import ext_template.tasks  # noqa: F401
-
-from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
+from omni.isaac.lab.envs import (
+    DirectMARLEnv,
+    DirectMARLEnvCfg,
+    DirectRLEnvCfg,
+    ManagerBasedRLEnvCfg,
+    multi_agent_to_single_agent,
+)
 from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
-from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+from omni.isaac.lab_tasks.utils import get_checkpoint_path
+from omni.isaac.lab_tasks.utils.hydra import hydra_task_config
 from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 
 Unitree_package_path = "scripts"
@@ -55,6 +73,9 @@ import unitree_isaaclab_env # 导入自定义的Unitree训练的环境的包，�
 
 # 这些配置是在Pytorch中优化CUDA和cuDNN的配置
 # TF32是在NVIDIA Ampere架构GPU上引入的新浮点格式，前两个设为true，则会允许cuda和cudnn使用TF32格式，可以显著提高计算性能，但会带来轻微的数值精度损失，但在深度学习任务中通常不会有太大影响
+# Import extensions to set up environment tasks
+import ext_template.tasks  # noqa: F401
+
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 # 控制cudnn是否使用确定性算法，如果设置为True，保证每次运行的结果是一样的，但会降低性能；如果为False，每次算法的运行结果可能会有所不同，但通常会更快
@@ -64,11 +85,20 @@ torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
 
 
-def main(Pre_trained_model_path : str  = ""):
+@hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlOnPolicyRunnerCfg):
     """Train with RSL-RL agent."""
-    # parse configuration
-    env_cfg: ManagerBasedRLEnvCfg = parse_env_cfg(args_cli.task, num_envs=args_cli.num_envs)
-    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
+    # override configurations with non-hydra CLI arguments
+    agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
+    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    agent_cfg.max_iterations = (
+        args_cli.max_iterations if args_cli.max_iterations is not None else agent_cfg.max_iterations
+    )
+
+    # set the environment seed
+    # note: certain randomizations occur in the environment initialization so we set the seed here
+    env_cfg.seed = agent_cfg.seed
+    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
 
     # specify directory for logging experiments
     # NOTE: 从这里可以看出，RSL-RL的训练结果会被保存在logs/rsl_rl/experiment_name文件夹下，按照时间戳命名
@@ -87,7 +117,7 @@ def main(Pre_trained_model_path : str  = ""):
     # wrap for video recording
     if args_cli.video:
         video_kwargs = {
-            "video_folder": os.path.join(log_dir, "videos"),
+            "video_folder": os.path.join(log_dir, "videos", "train"),
             "step_trigger": lambda step: step % args_cli.video_interval == 0,
             "video_length": args_cli.video_length,
             "disable_logger": True,
@@ -95,6 +125,11 @@ def main(Pre_trained_model_path : str  = ""):
         print("[INFO] Recording videos during training.")
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
+
+    # convert to single-agent instance if required by the RL algorithm
+    if isinstance(env.unwrapped, DirectMARLEnv):
+        env = multi_agent_to_single_agent(env)
+
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env)
 
@@ -117,9 +152,6 @@ def main(Pre_trained_model_path : str  = ""):
         load_dict = torch.load(Pre_trained_model_path)
         runner.alg.actor_critic.load_state_dict(load_dict["actor_critic"])
 
-    # set seed of the environment
-    env.seed(agent_cfg.seed)
-
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
@@ -136,7 +168,7 @@ def main(Pre_trained_model_path : str  = ""):
 
 
 if __name__ == "__main__":
-    # run the main execution
+    # run the main function
     main()
     # close sim app
     simulation_app.close()

@@ -1,6 +1,6 @@
-from ext_template.tasks.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
-
 from omni.isaac.lab.utils import configclass
+
+from ext_template.tasks.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 
 ##
 # Pre-defined configs
@@ -37,5 +37,5 @@ class AnymalDRoughEnvCfg_PLAY(AnymalDRoughEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
         # remove random pushing
-        self.randomization.base_external_force_torque = None
-        self.randomization.push_robot = None
+        self.events.base_external_force_torque = None
+        self.events.push_robot = None
